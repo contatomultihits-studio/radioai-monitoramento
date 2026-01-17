@@ -10,6 +10,7 @@ import { jsPDF } from 'jspdf';
 // --- CONFIGURAÇÕES ---
 const SHEET_ID = '1xFRBBHpmn38TiBdZcwN2556811FKkfbEEB3HmmdxT1s';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+const REFRESH_INTERVAL_MS = 30000; // 30 segundos
 
 // --- COMPONENTES ---
 
@@ -85,12 +86,14 @@ const MusicCard = ({ track, isNowPlaying }: { track: any, isNowPlaying: boolean 
 const App = () => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({ date: '', hour: '', search: '' });
   const [visibleCount, setVisibleCount] = useState(15);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const response = await fetch(`${CSV_URL}&cache_bust=${Date.now()}`);
@@ -132,7 +135,7 @@ const App = () => {
           data: d || '---',
           hora: t ? t.substring(0, 5) : '00:00'
         };
-      }).filter(t => t.artista !== 'artista'); // Limpeza de possíveis repetições de header
+      }).filter(t => t.artista !== 'artista'); 
 
       const sorted = formatted.sort((a, b) => {
         const parseDate = (dStr: string, tStr: string) => {
@@ -143,15 +146,29 @@ const App = () => {
       });
 
       setData(sorted);
-      if (sorted.length > 0 && !filters.date) setFilters(f => ({ ...f, date: sorted[0].data }));
+      if (sorted.length > 0 && !filters.date) {
+        setFilters(prev => prev.date ? prev : { ...prev, date: sorted[0].data });
+      }
     } catch (err: any) {
-      setError(err.message);
+      if (!isSilent) setError(err.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, []);
+  }, [filters.date]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Carregamento inicial
+  useEffect(() => { 
+    fetchData(); 
+  }, [fetchData]);
+
+  // Sistema de atualização automática a cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const filteredData = useMemo(() => {
     return data.filter(t => {
@@ -169,9 +186,9 @@ const App = () => {
   const exportPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text("METROPOLITANA FM - RELATÓRIO", 14, 20);
+    doc.text("RÁDIO AI - RELATÓRIO DE MONITORAMENTO", 14, 20);
     doc.setFontSize(10);
-    doc.text(`Data Selecionada: ${filters.date || 'Todas'} | Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Data: ${filters.date || 'Todas'} | Gerado em: ${new Date().toLocaleString()}`, 14, 28);
     
     let y = 40;
     doc.setFont("helvetica", "bold");
@@ -186,7 +203,7 @@ const App = () => {
       doc.text(t.artista.substring(0, 30), 40, y);
       doc.text(t.musica.substring(0, 45), 100, y);
     });
-    doc.save(`Relatorio_Radio_${filters.date.replace(/\//g, '-')}.pdf`);
+    doc.save(`Monitoramento_RadioAI_${filters.date.replace(/\//g, '-')}.pdf`);
   };
 
   return (
@@ -198,15 +215,15 @@ const App = () => {
               <Radio size={24} />
             </div>
             <div>
-              <h1 className="font-black text-xl tracking-tighter text-slate-900 leading-none uppercase">Metropolitana</h1>
-              <p className="text-[10px] font-bold text-sky-500 uppercase tracking-[0.2em] mt-1">Diretoria</p>
+              <h1 className="font-black text-xl tracking-tighter text-slate-900 leading-none uppercase">RÁDIO AI</h1>
+              <p className="text-[10px] font-bold text-sky-500 uppercase tracking-[0.2em] mt-1">Monitoramento - Metropolitana FM</p>
             </div>
           </div>
           <button 
-            onClick={fetchData} 
-            className={`p-3 rounded-xl transition-all ${loading ? 'bg-slate-100' : 'bg-slate-50 hover:bg-slate-100'}`}
+            onClick={() => fetchData()} 
+            className={`p-3 rounded-xl transition-all ${refreshing ? 'bg-slate-100' : 'bg-slate-50 hover:bg-slate-100'}`}
           >
-            <RefreshCw className={`${loading ? 'animate-spin text-sky-500' : 'text-slate-400'}`} size={20} />
+            <RefreshCw className={`${refreshing ? 'animate-spin text-sky-500' : 'text-slate-400'}`} size={20} />
           </button>
         </div>
       </header>
@@ -217,7 +234,7 @@ const App = () => {
             <AlertCircle className="mx-auto text-red-400 mb-4" size={48} />
             <h2 className="text-xl font-black text-slate-800 mb-2">Erro de Conexão</h2>
             <p className="text-slate-500 text-sm mb-8">{error}</p>
-            <button onClick={fetchData} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-slate-800 transition-all">
+            <button onClick={() => fetchData()} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-slate-800 transition-all">
               Tentar Novamente
             </button>
           </div>
@@ -275,7 +292,7 @@ const App = () => {
               {loading ? (
                 <div className="py-20 text-center">
                   <Loader2 className="animate-spin mx-auto text-sky-400 mb-4" size={40} />
-                  <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Sincronizando DADOS_BRUTOS...</p>
+                  <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Sincronizando DADOS...</p>
                 </div>
               ) : filteredData.length > 0 ? (
                 <>
