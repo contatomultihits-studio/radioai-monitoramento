@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -10,9 +9,7 @@ import { jsPDF } from 'jspdf';
 // --- CONFIGURAÇÕES ---
 const SHEET_ID = '1xFRBBHpmn38TiBdZcwN2556811FKkfbEEB3HmmdxT1s';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-const REFRESH_INTERVAL_MS = 30000; // 30 segundos
-
-// --- COMPONENTES ---
+const REFRESH_INTERVAL_MS = 30000;
 
 const MusicCard = ({ track, isNowPlaying }: { track: any, isNowPlaying: boolean }) => {
   const [artwork, setArtwork] = useState<string | null>(null);
@@ -88,7 +85,9 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ date: '', hour: '', search: '' });
+  
+  // Adicionado filtro de Rádio
+  const [filters, setFilters] = useState({ date: '', hour: '', search: '', radio: 'Metropolitana FM' });
   const [visibleCount, setVisibleCount] = useState(15);
 
   const fetchData = useCallback(async (isSilent = false) => {
@@ -120,9 +119,10 @@ const App = () => {
       const idxArtista = header.indexOf('artista');
       const idxMusica = header.indexOf('musica');
       const idxTocouEm = header.indexOf('tocou_em');
+      const idxRadio = header.indexOf('radio'); // Nova coluna detectada
 
       if (idxArtista === -1 || idxMusica === -1 || idxTocouEm === -1) {
-        throw new Error("Colunas 'artista', 'musica' ou 'tocou_em' não encontradas.");
+        throw new Error("Colunas essenciais não encontradas.");
       }
 
       const formatted = rows.slice(1).map((row, i) => {
@@ -132,6 +132,7 @@ const App = () => {
           id: `t-${i}`,
           artista: row[idxArtista] || 'Desconhecido',
           musica: row[idxMusica] || 'Sem Título',
+          radio: row[idxRadio] || 'Metropolitana FM', // Lê o nome da rádio
           data: d || '---',
           hora: t ? t.substring(0, 5) : '00:00'
         };
@@ -157,36 +158,32 @@ const App = () => {
     }
   }, [filters.date]);
 
-  // Carregamento inicial
-  useEffect(() => { 
-    fetchData(); 
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Sistema de atualização automática a cada 30 segundos
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchData(true);
-    }, REFRESH_INTERVAL_MS);
+    const interval = setInterval(() => { fetchData(true); }, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 
   const filteredData = useMemo(() => {
     return data.filter(t => {
+      const matchRadio = filters.radio ? t.radio === filters.radio : true;
       const matchDate = filters.date ? t.data === filters.date : true;
       const matchHour = filters.hour ? t.hora.startsWith(filters.hour) : true;
       const matchSearch = filters.search 
         ? (t.artista + t.musica).toLowerCase().includes(filters.search.toLowerCase()) 
         : true;
-      return matchDate && matchHour && matchSearch;
+      return matchRadio && matchDate && matchHour && matchSearch;
     });
   }, [data, filters]);
 
   const uniqueDates = useMemo(() => [...new Set(data.map(d => d.data))], [data]);
+  const uniqueRadios = useMemo(() => [...new Set(data.map(d => d.radio))], [data]);
 
   const exportPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text("RÁDIO AI - RELATÓRIO DE MONITORAMENTO", 14, 20);
+    doc.text(`RÁDIO AI - ${filters.radio}`, 14, 20);
     doc.setFontSize(10);
     doc.text(`Data: ${filters.date || 'Todas'} | Gerado em: ${new Date().toLocaleString()}`, 14, 28);
     
@@ -203,7 +200,7 @@ const App = () => {
       doc.text(t.artista.substring(0, 30), 40, y);
       doc.text(t.musica.substring(0, 45), 100, y);
     });
-    doc.save(`Monitoramento_RadioAI_${filters.date.replace(/\//g, '-')}.pdf`);
+    doc.save(`Monitoramento_${filters.radio}_${filters.date.replace(/\//g, '-')}.pdf`);
   };
 
   return (
@@ -216,13 +213,10 @@ const App = () => {
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tighter text-slate-900 leading-none uppercase">RÁDIO AI</h1>
-              <p className="text-[10px] font-bold text-sky-500 uppercase tracking-[0.2em] mt-1">Monitoramento - Metropolitana FM</p>
+              <p className="text-[10px] font-bold text-sky-500 uppercase tracking-[0.2em] mt-1">Monitoramento - {filters.radio}</p>
             </div>
           </div>
-          <button 
-            onClick={() => fetchData()} 
-            className={`p-3 rounded-xl transition-all ${refreshing ? 'bg-slate-100' : 'bg-slate-50 hover:bg-slate-100'}`}
-          >
+          <button onClick={() => fetchData()} className={`p-3 rounded-xl transition-all ${refreshing ? 'bg-slate-100' : 'bg-slate-50 hover:bg-slate-100'}`}>
             <RefreshCw className={`${refreshing ? 'animate-spin text-sky-500' : 'text-slate-400'}`} size={20} />
           </button>
         </div>
@@ -241,6 +235,19 @@ const App = () => {
         ) : (
           <>
             <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 mb-10 border border-slate-100">
+              {/* Seletor de Rádio */}
+              <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-2xl">
+                {['Metropolitana FM', 'Antena 1'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setFilters(f => ({ ...f, radio: r }))}
+                    className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${filters.radio === r ? 'bg-white shadow-md text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+
               <div className="relative mb-4">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
                 <input 
@@ -264,26 +271,9 @@ const App = () => {
                     {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                <div className="w-32 relative">
-                  <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500" size={18} />
-                  <select 
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-600 appearance-none outline-none"
-                    value={filters.hour}
-                    onChange={e => setFilters(f => ({ ...f, hour: e.target.value }))}
-                  >
-                    <option value="">Hora</option>
-                    {Array.from({length: 24}).map((_, i) => {
-                      const h = i.toString().padStart(2, '0');
-                      return <option key={h} value={h}>{h}:00</option>
-                    })}
-                  </select>
-                </div>
               </div>
 
-              <button 
-                onClick={exportPDF}
-                className="w-full py-4 bg-yellow-400 hover:bg-yellow-500 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all shadow-lg shadow-yellow-100 active:scale-95"
-              >
+              <button onClick={exportPDF} className="w-full py-4 bg-yellow-400 hover:bg-yellow-500 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all shadow-lg shadow-yellow-100">
                 <Download size={18} /> Exportar Playlist PDF
               </button>
             </div>
@@ -304,17 +294,14 @@ const App = () => {
                     />
                   ))}
                   {filteredData.length > visibleCount && (
-                    <button 
-                      onClick={() => setVisibleCount(c => c + 15)}
-                      className="w-full py-6 rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400 font-bold hover:bg-white hover:border-sky-300 hover:text-sky-500 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest"
-                    >
+                    <button onClick={() => setVisibleCount(c => c + 15)} className="w-full py-6 rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400 font-bold hover:bg-white hover:border-sky-300 hover:text-sky-500 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest">
                       <Plus size={16} /> Carregar Mais
                     </button>
                   )}
                 </>
               ) : (
                 <div className="bg-white p-20 rounded-[3rem] text-center border-4 border-dashed border-slate-100">
-                  <p className="font-black text-slate-300 uppercase text-xs tracking-widest">Nenhum registro encontrado</p>
+                  <p className="font-black text-slate-300 uppercase text-xs tracking-widest">Nenhum registro para {filters.radio}</p>
                 </div>
               )}
             </div>
