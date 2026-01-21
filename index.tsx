@@ -85,8 +85,6 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Adicionado filtro de Rádio
   const [filters, setFilters] = useState({ date: '', hour: '', search: '', radio: 'Metropolitana FM' });
   const [visibleCount, setVisibleCount] = useState(15);
 
@@ -119,7 +117,7 @@ const App = () => {
       const idxArtista = header.indexOf('artista');
       const idxMusica = header.indexOf('musica');
       const idxTocouEm = header.indexOf('tocou_em');
-      const idxRadio = header.indexOf('radio'); // Nova coluna detectada
+      const idxRadio = header.indexOf('radio');
 
       if (idxArtista === -1 || idxMusica === -1 || idxTocouEm === -1) {
         throw new Error("Colunas essenciais não encontradas.");
@@ -127,21 +125,39 @@ const App = () => {
 
       const formatted = rows.slice(1).map((row, i) => {
         const rawTime = row[idxTocouEm] || '';
-        const [d, t] = rawTime.split(' ');
+        
+        // Lógica para tratar formatos "2026-01-21 14:53" E "2026-01-21T14:53:00.000Z"
+        let datePart = '';
+        let timePart = '00:00';
+
+        if (rawTime.includes('T')) {
+          // Formato ISO (Antena 1)
+          const parts = rawTime.split('T');
+          datePart = parts[0];
+          timePart = parts[1].substring(0, 5);
+        } else if (rawTime.includes(' ')) {
+          // Formato simples (Metropolitana)
+          const parts = rawTime.split(' ');
+          datePart = parts[0];
+          timePart = parts[1].substring(0, 5);
+        } else {
+          datePart = rawTime;
+        }
+
         return {
           id: `t-${i}`,
           artista: row[idxArtista] || 'Desconhecido',
           musica: row[idxMusica] || 'Sem Título',
-          radio: row[idxRadio] || 'Metropolitana FM', // Lê o nome da rádio
-          data: d || '---',
-          hora: t ? t.substring(0, 5) : '00:00'
+          radio: row[idxRadio] || 'Metropolitana FM',
+          data: datePart || '---',
+          hora: timePart
         };
       }).filter(t => t.artista !== 'artista'); 
 
       const sorted = formatted.sort((a, b) => {
         const parseDate = (dStr: string, tStr: string) => {
-          const [d, m, y] = dStr.split('/');
-          return new Date(`${y}-${m}-${d}T${tStr}`).getTime();
+          // Normaliza a data para YYYY-MM-DD para o construtor Date
+          return new Date(`${dStr}T${tStr}`).getTime();
         };
         return parseDate(b.data, b.hora) - parseDate(a.data, a.hora);
       });
@@ -178,7 +194,6 @@ const App = () => {
   }, [data, filters]);
 
   const uniqueDates = useMemo(() => [...new Set(data.map(d => d.data))], [data]);
-  const uniqueRadios = useMemo(() => [...new Set(data.map(d => d.radio))], [data]);
 
   const exportPDF = () => {
     const doc = new jsPDF();
@@ -235,7 +250,6 @@ const App = () => {
         ) : (
           <>
             <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 mb-10 border border-slate-100">
-              {/* Seletor de Rádio */}
               <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-2xl">
                 {['Metropolitana FM', 'Antena 1'].map(r => (
                   <button
