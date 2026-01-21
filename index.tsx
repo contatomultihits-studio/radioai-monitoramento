@@ -112,7 +112,15 @@ const App = () => {
 
       const formatted = rows.slice(1).map((row, i) => {
         const rawTime = row[idxTocouEm] || '';
-        let dObj = new Date(rawTime);
+        
+        // CORREÇÃO CRÍTICA: Trata o formato "2026-01-21 12:00" para ser aceito pelo New Date()
+        const normalizedTime = rawTime.replace(/-/g, '/');
+        let dObj = new Date(normalizedTime);
+        
+        // Fallback para Antena 1 (ISO)
+        if (isNaN(dObj.getTime())) {
+          dObj = new Date(rawTime);
+        }
         
         // Ajuste Fuso Antena 1
         if (row[idxRadio] === 'Antena 1' && rawTime.includes('T')) {
@@ -126,12 +134,11 @@ const App = () => {
           timePart = dObj.toTimeString().substring(0, 5);
           ts = dObj.getTime();
         } else {
-          // Tratamento especial para o formato da Metropolitana
+          // Fallback manual se tudo falhar
           const parts = rawTime.split(' ');
           datePart = parts[0] || "---";
           timePart = parts[1]?.substring(0, 5) || "00:00";
-          // Converte YYYY-MM-DD para timestamp comparável
-          ts = new Date(datePart.replace(/-/g, '/') + ' ' + timePart).getTime() || 0;
+          ts = 0;
         }
 
         return {
@@ -145,7 +152,7 @@ const App = () => {
         };
       }).filter(t => t.artista !== 'artista');
 
-      // Ordenação rigorosa por tempo
+      // Ordenação: O maior timestamp (mais recente) no topo
       const sorted = formatted.sort((a, b) => b.timestamp - a.timestamp);
 
       setData(sorted);
@@ -175,9 +182,11 @@ const App = () => {
     });
   }, [data, filters]);
 
-  const uniqueDates = useMemo(() => [...new Set(data.filter(t => t.radio === filters.radio).map(d => d.data))].sort().reverse(), [data, filters.radio]);
+  const uniqueDates = useMemo(() => {
+    const dates = data.filter(t => t.radio === filters.radio).map(d => d.data);
+    return [...new Set(dates)].sort().reverse();
+  }, [data, filters.radio]);
 
-  // FUNÇÃO DE EXPORTAR PDF (RESTAURADA E MELHORADA)
   const exportPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
@@ -228,7 +237,7 @@ const App = () => {
           
           <div className="relative mb-4">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-            <input type="text" placeholder="Pesquisar por artista ou música..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700" value={filters.search} onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
+            <input type="text" placeholder="Pesquisar..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700" value={filters.search} onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
           </div>
 
           <div className="flex gap-3 mb-4">
