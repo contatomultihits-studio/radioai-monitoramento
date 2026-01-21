@@ -53,7 +53,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ date: '', hour: '', search: '', radio: 'Metropolitana FM' });
+  const [filters, setFilters] = useState({ date: '', search: '', radio: 'Metropolitana FM' });
   const [visibleCount, setVisibleCount] = useState(15);
 
   const fetchData = useCallback(async (isSilent = false) => {
@@ -72,25 +72,30 @@ const App = () => {
       const idxArtista = header.indexOf('artista'), idxMusica = header.indexOf('musica'), idxTocouEm = header.indexOf('tocou_em'), idxRadio = header.indexOf('radio');
 
       const formatted = rows.slice(1).map((row, i) => {
-        const rawTime = row[idxTocouEm] || '';
-        const dObj = new Date(rawTime);
+        let rawTime = row[idxTocouEm] || '';
+        let dObj = new Date(rawTime);
         
-        // CORREÇÃO DE FUSO: Se for Antena 1 e o horário estiver no futuro (UTC), subtraímos 3 horas
+        // Ajuste de Fuso Horário para Antena 1 (UTC para Brasília)
         if (row[idxRadio] === 'Antena 1' && rawTime.includes('T')) {
           dObj.setHours(dObj.getHours() - 3);
         }
 
-        // Se a data for inválida (ex: Metropolitana que usa outro formato), tentamos tratar manualmente
         let finalDate = "";
         let finalTime = "";
+        let timestamp = 0;
 
+        // Tenta converter para data válida para ordenação
         if (!isNaN(dObj.getTime())) {
           finalDate = dObj.toISOString().split('T')[0];
           finalTime = dObj.toTimeString().substring(0, 5);
+          timestamp = dObj.getTime();
         } else {
+          // Se falhar (formato Metro), tenta quebrar o texto manualmente
           const parts = rawTime.split(' ');
           finalDate = parts[0] || "---";
           finalTime = parts[1]?.substring(0, 5) || "00:00";
+          // Cria um timestamp manual para a Metro conseguir ordenar
+          timestamp = new Date(rawTime.replace(/-/g, '/')).getTime() || 0;
         }
 
         return {
@@ -100,11 +105,11 @@ const App = () => {
           radio: row[idxRadio] || 'Metropolitana FM',
           data: finalDate,
           hora: finalTime,
-          timestamp: !isNaN(dObj.getTime()) ? dObj.getTime() : 0
+          timestamp: timestamp
         };
-      }).filter(t => t.artista !== 'artista');
+      }).filter(t => t.artista !== 'artista' && t.musica !== 'musica');
 
-      // ORDENAÇÃO RÍGIDA: Garante que a mais nova (maior timestamp) esteja sempre no topo
+      // ORDENAÇÃO POR DATA E HORA (O mais recente primeiro)
       const sorted = formatted.sort((a, b) => b.timestamp - a.timestamp);
 
       setData(sorted);
@@ -134,7 +139,7 @@ const App = () => {
     });
   }, [data, filters]);
 
-  const uniqueDates = useMemo(() => [...new Set(data.map(d => d.data))].sort().reverse(), [data]);
+  const uniqueDates = useMemo(() => [...new Set(data.filter(t => t.radio === filters.radio).map(d => d.data))].sort().reverse(), [data, filters.radio]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -157,7 +162,7 @@ const App = () => {
         <div className="bg-white p-6 rounded-[2.5rem] shadow-xl mb-10 border border-slate-100">
           <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-2xl">
             {['Metropolitana FM', 'Antena 1'].map(r => (
-              <button key={r} onClick={() => { setFilters(f => ({ ...f, radio: r })); setVisibleCount(15); }} className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${filters.radio === r ? 'bg-white shadow-md text-slate-900' : 'text-slate-400'}`}>{r}</button>
+              <button key={r} onClick={() => { setFilters(f => ({ ...f, radio: r, date: '' })); setVisibleCount(15); }} className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${filters.radio === r ? 'bg-white shadow-md text-slate-900' : 'text-slate-400'}`}>{r}</button>
             ))}
           </div>
           <div className="relative mb-4">
@@ -167,19 +172,20 @@ const App = () => {
           <div className="flex-grow relative">
             <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500" size={18} />
             <select className="w-full pl-12 pr-10 py-4 bg-slate-50 rounded-2xl font-bold text-slate-600 appearance-none outline-none" value={filters.date} onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}>
+              <option value="">Selecione a Data</option>
               {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
         </div>
 
         <div className="space-y-4">
-          {loading ? <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-sky-400 mb-4" size={40} /><p className="font-bold text-slate-400 text-[10px]">SINCROZINANDO...</p></div> : 
+          {loading ? <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-sky-400 mb-4" size={40} /><p className="font-bold text-slate-400 text-[10px]">SINCRONIZANDO...</p></div> : 
           filteredData.length > 0 ? (
             <>
               {filteredData.slice(0, visibleCount).map((track, idx) => <MusicCard key={track.id} track={track} isNowPlaying={idx === 0 && !filters.search} />)}
               {filteredData.length > visibleCount && <button onClick={() => setVisibleCount(c => c + 15)} className="w-full py-6 rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400 font-bold hover:bg-white transition-all uppercase text-[10px]"><Plus size={16} /> Carregar Mais</button>}
             </>
-          ) : <div className="text-center py-20 bg-white rounded-[3rem] text-slate-300 font-black uppercase text-xs">Nenhum registro encontrado</div>}
+          ) : <div className="text-center py-20 bg-white rounded-[3rem] text-slate-300 font-black uppercase text-xs">Nenhum registro para {filters.radio}</div>}
         </div>
       </main>
     </div>
