@@ -67,6 +67,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({ date: '', search: '', radio: 'Metropolitana FM' });
   const [visibleCount, setVisibleCount] = useState(15);
+  const [exportHour, setExportHour] = useState('all');
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -144,16 +145,46 @@ const App = () => {
     return [...new Set(dates)].sort().reverse();
   }, [data, filters.radio]);
 
+  const hourOptions = useMemo(() => {
+    return Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  }, []);
+
   const exportPDF = () => {
+    const exportRows = filteredData.filter(t => {
+      if (exportHour === 'all') return true;
+      return t.hora.startsWith(`${exportHour}:`);
+    });
+
+    if (exportRows.length === 0) {
+      alert('Nenhum registro encontrado para o horário selecionado.');
+      return;
+    }
+
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text(`RELATÓRIO DE MONITORAMENTO - ${filters.radio}`, 14, 20);
     doc.setFontSize(10);
-    doc.text(`Data: ${filters.date} | Gerado em: ${new Date().toLocaleString()}`, 14, 28);
-    let y = 40; doc.setFont("helvetica", "bold"); doc.text("HORA", 14, y); doc.text("ARTISTA", 40, y); doc.text("MÚSICA", 100, y);
-    doc.line(14, y + 2, 196, y + 2); doc.setFont("helvetica", "normal");
-    filteredData.slice(0, 100).forEach(t => {
-      y += 8; if (y > 280) { doc.addPage(); y = 20; }
+    const hourLabel = exportHour === 'all' ? 'Todas as horas' : `${exportHour}:00`;
+    doc.text(`Data: ${filters.date} | Hora: ${hourLabel} | Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+
+    let y = 40;
+    const renderHeader = () => {
+      doc.setFont("helvetica", "bold");
+      doc.text("HORA", 14, y);
+      doc.text("ARTISTA", 40, y);
+      doc.text("MÚSICA", 100, y);
+      doc.line(14, y + 2, 196, y + 2);
+      doc.setFont("helvetica", "normal");
+    };
+
+    renderHeader();
+    exportRows.forEach(t => {
+      y += 8;
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+        renderHeader();
+      }
       doc.text(t.hora, 14, y); doc.text(t.artista.substring(0, 30), 40, y); doc.text(t.musica.substring(0, 45), 100, y);
     });
     doc.save(`Playlist_${filters.radio}_${filters.date}.pdf`);
@@ -182,7 +213,8 @@ const App = () => {
             ))}
           </div>
           <div className="relative mb-4"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} /><input type="text" placeholder="Pesquisar..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700" value={filters.search} onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} /></div>
-          <div className="relative"><Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500" size={18} /><select className="w-full pl-12 pr-10 py-4 bg-slate-50 rounded-2xl font-bold text-slate-600 appearance-none outline-none" value={filters.date} onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}>{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+          <div className="relative mb-4"><Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500" size={18} /><select className="w-full pl-12 pr-10 py-4 bg-slate-50 rounded-2xl font-bold text-slate-600 appearance-none outline-none" value={filters.date} onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}>{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+          <div className="relative"><Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500" size={18} /><select className="w-full pl-12 pr-10 py-4 bg-slate-50 rounded-2xl font-bold text-slate-600 appearance-none outline-none" value={exportHour} onChange={e => setExportHour(e.target.value)}><option value="all">Todas as horas</option>{hourOptions.map(h => <option key={h} value={h}>{h}:00</option>)}</select></div>
           <button onClick={exportPDF} className="w-full mt-4 py-4 bg-yellow-400 hover:bg-yellow-500 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95"><Download size={18} /> Exportar Playlist PDF</button>
         </div>
         <div className="space-y-4">
