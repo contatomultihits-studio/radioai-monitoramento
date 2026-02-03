@@ -150,7 +150,12 @@ const App = () => {
   }, []);
 
   const exportPDF = () => {
-    const exportRows = filteredData.filter(t => {
+    const exportBaseRows = data.filter(t => {
+      const matchRadio = t.radio.trim() === filters.radio.trim();
+      const matchDate = filters.date ? t.data === filters.date : true;
+      return matchRadio && matchDate;
+    });
+    const exportRows = exportBaseRows.filter(t => {
       if (exportHour === 'all') return true;
       return t.hora.startsWith(`${exportHour}:`);
     });
