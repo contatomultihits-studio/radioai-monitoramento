@@ -213,7 +213,7 @@ const App = () => {
       <main className="max-w-3xl mx-auto px-6 py-10">
         <div className="bg-white p-6 rounded-[2.5rem] shadow-xl mb-10 border border-slate-100">
           <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-2xl">
-            {['Metropolitana FM', 'Antena 1'].map(r => (
+            {['Metropolitana FM', 'Antena 1', 'Forbes Radio'].map].map(r => (
               <button key={r} onClick={() => { setFilters(f => ({ ...f, radio: r, date: '' })); setVisibleCount(15); }} className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${filters.radio === r ? 'bg-white shadow-md text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>{r}</button>
             ))}
           </div>
